@@ -313,7 +313,15 @@ class EMMAIssuerDetailScraper(EMMABaseScraper):
         # prepare directory for financial disclosures PDFs
         fcd_dir = self.out_dir / "financial_disclosures"
         fcd_dir.mkdir(exist_ok=True, parents=True)
-        await page.wait_for_selector("select[name='lvFCD_length']", timeout=15000)
+        # Wait for either the disclosures dropdown or a visible no-record message
+        await page.wait_for_selector(
+            "select[name='lvFCD_length'], div#t-fcd p.no-record:visible",
+            timeout=15000
+        )
+        # If the no-record message is visible, skip downloading
+        if await page.is_visible("div#t-fcd p.no-record"):
+            print(f"[WARN] No financial disclosures for issuer id={id_}", file=sys.stderr)
+            return
         await page.select_option("select[name='lvFCD_length']", value="100")
         await page.wait_for_timeout(1000)
         all_fcd = []
