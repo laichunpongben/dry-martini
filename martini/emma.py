@@ -357,10 +357,50 @@ class EMMAIssuerDetailScraper(EMMABaseScraper):
 
 
 # Register EMMA-specific scrapers
+class EMMAIssueDetailScraper(EMMABaseScraper):
+    """Scrape the security table for a given issue ID from EMMA IssueView page."""
+
+    def build_url(self, id: str, **_) -> str:
+        return f"https://emma.msrb.org/IssueView/Details/{id}"
+
+    async def parse_and_save(self, page: Page, **kwargs) -> None:
+        await page.wait_for_selector("table#dtSecurities tbody tr", timeout=15000)
+        rows = await page.locator("table#dtSecurities tbody tr").all()
+        securities = []
+        for row in rows:
+            tds = await row.locator("td").all()
+            cusip = await tds[0].locator("img").get_attribute("data-cusip9") or ""
+            principal = (await tds[1].inner_text()).strip()
+            description = (await tds[2].inner_text()).strip()
+            coupon = (await tds[3].inner_text()).strip()
+            maturity = (await tds[4].inner_text()).strip()
+            price_yield = (await tds[5].inner_text()).strip()
+            price = (await tds[6].inner_text()).strip()
+            yield_val = (await tds[7].inner_text()).strip()
+            ratings = []
+            for i in range(8, 12):
+                cell = tds[i]
+                img = cell.locator("img")
+                if await img.count():
+                    ratings.append((await img.get_attribute("data-rating")) or "")
+                else:
+                    ratings.append((await cell.inner_text()).strip())
+            securities.append([cusip, principal, description, coupon, maturity, price_yield, price, yield_val] + ratings)
+        securities_file = self.out_dir / "securities.csv"
+        with open(securities_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "CUSIP", "Principal Amount at Issuance ($)", "Security Description",
+                "Coupon", "Maturity Date", "Price/Yield", "Price", "Yield",
+                "Fitch", "KBRA", "Moody's", "S&P"
+            ])
+            writer.writerows(securities)
+        print(f"✅ Saved {len(securities)} securities to {securities_file.name}", file=sys.stderr)
 SCRAPERS = {
     "security": EMMASecurityDetailScraper,
     "state_issuers": EMMAStateIssuersScraper,
     "issuer_detail": EMMAIssuerDetailScraper,
+    "issue_detail": EMMAIssueDetailScraper,
 }
 
 
@@ -387,6 +427,8 @@ async def main():
         parser.error("state_issuers task requires either --state or --all-states, not both")
     if args.task == "issuer_detail" and not args.id:
         parser.error("issuer_detail task requires --id")
+    if args.task == "issue_detail" and not args.id:
+        parser.error("issue_detail task requires --id")
     # aggregate issuers for all states into a single CSV
     if args.task == "state_issuers" and args.all_states:
         base_output = Path(args.output_dir)
@@ -428,7 +470,7 @@ async def main():
         params["cusip"] = args.cusip
     elif args.task == "state_issuers":
         params["state"] = args.state
-    elif args.task == "issuer_detail":
+    elif args.task == "issuer_detail" or args.task == "issue_detail":
         params["id"] = args.id
 
     await scraper.run(**params)
