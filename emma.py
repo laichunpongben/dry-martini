@@ -141,23 +141,25 @@ class EMMASecurityDetailScraper(EMMABaseScraper):
             [(await td.inner_text()).strip() for td in await row.locator("td").all()]
             for row in rows
         ]
-        with open(self.out_dir / f"{cusip}_trades.csv", "w", newline="") as f:
+        trades_file = self.out_dir / "trades.csv"
+        with open(trades_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
                 "Trade Date", "High/Low Price", "High/Low Yield",
                 "Trade Count", "Total Trade Amount"
             ])
             writer.writerows(trades)
-        print(f"✅ Saved {len(trades)} trades to {cusip}_trades.csv", file=sys.stderr)
+        print(f"✅ Saved {len(trades)} trades to {trades_file.name}", file=sys.stderr)
 
         # --- RATINGS ---
         await page.click("a#ui-id-3")
         await self.handle_consent(page, context=page.context)
         await page.wait_for_selector("#ratings", timeout=15000)
         ratings_text = await page.locator("#ratings").inner_text()
-        with open(self.out_dir / f"{cusip}_ratings.txt", "w") as f:
+        ratings_file = self.out_dir / "ratings.txt"
+        with open(ratings_file, "w") as f:
             f.write(ratings_text)
-        print(f"✅ Saved ratings to {cusip}_ratings.txt", file=sys.stderr)
+        print(f"✅ Saved ratings to {ratings_file.name}", file=sys.stderr)
 
         # --- DISCLOSURES ---
         await page.click("a#ui-id-4")
@@ -169,11 +171,12 @@ class EMMASecurityDetailScraper(EMMABaseScraper):
              (await tr.locator("td:last-child").inner_text()).strip()]
             for tr in dr
         ]
-        with open(self.out_dir / f"{cusip}_disclosures.csv", "w", newline="") as f:
+        disclosures_file = self.out_dir / "disclosures.csv"
+        with open(disclosures_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["Document", "Posted Date"])
             writer.writerows(disclosures)
-        print(f"✅ Saved disclosures to {cusip}_disclosures.csv", file=sys.stderr)
+        print(f"✅ Saved disclosures to {disclosures_file.name}", file=sys.stderr)
 
         # --- FINAL SCALE ---
         await page.click("a#ui-id-5")
@@ -192,11 +195,12 @@ class EMMASecurityDetailScraper(EMMABaseScraper):
                 if await td.locator("img").count():
                     rts.append(await td.locator("img").get_attribute("data-rating"))
             final.append([c9, pri, cop, mat, ",".join(rts)])
-        with open(self.out_dir / f"{cusip}_final_scale.csv", "w", newline="") as f:
+        final_file = self.out_dir / "final_scale.csv"
+        with open(final_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["CUSIP", "Principal", "Coupon", "Maturity", "Ratings"])
             writer.writerows(final)
-        print(f"✅ Saved final scale to {cusip}_final_scale.csv", file=sys.stderr)
+        print(f"✅ Saved final scale to {final_file.name}", file=sys.stderr)
 
 
 class EMMAStateIssuersScraper(EMMABaseScraper):
@@ -227,11 +231,12 @@ class EMMAStateIssuersScraper(EMMABaseScraper):
             await next_btn.click()
             await page.wait_for_timeout(1000)
 
-        with open(self.out_dir / f"{state}_issuers.csv", "w", newline="") as f:
+        issuers_file = self.out_dir / "issuers.csv"
+        with open(issuers_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["Issuer Name", "Issuer ID", "Issuer Type"])
             writer.writerows(all_data)
-        print(f"✅ Saved {len(all_data)} issuers for state={state}", file=sys.stderr)
+        print(f"✅ Saved {len(all_data)} issuers to {issuers_file.name}", file=sys.stderr)
 
 
 class EMMAIssuerDetailScraper(EMMABaseScraper):
@@ -264,14 +269,18 @@ class EMMAIssuerDetailScraper(EMMABaseScraper):
                 break
             await nxt.click()
             await page.wait_for_timeout(1000)
-        with open(self.out_dir / f"{id_}_issues.csv", "w", newline="") as f:
+        issues_file = self.out_dir / "issues.csv"
+        with open(issues_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["Issue ID", "Issue Description", "Dated Date", "Maturity Dates"])
             writer.writerows(issues)
-        print(f"✅ Saved {len(issues)} issues for issuer id={id_}", file=sys.stderr)
+        print(f"✅ Saved {len(issues)} issues to {issues_file.name}", file=sys.stderr)
 
         # --- OFFICIAL STATEMENTS TAB ---
         await page.click("li[data-cid='t-os']")
+        # prepare directory for official statements PDFs
+        official_dir = self.out_dir / "official_statements"
+        official_dir.mkdir(exist_ok=True, parents=True)
         await page.wait_for_selector("select[name='lvOS_length']", timeout=15000)
         await page.select_option("select[name='lvOS_length']", value="100")
         await page.wait_for_timeout(1000)
@@ -284,7 +293,7 @@ class EMMAIssuerDetailScraper(EMMABaseScraper):
                 href = await a.get_attribute("href")
                 pdf_url = urljoin("https://emma.msrb.org", href)
                 filename = Path(urlparse(href).path).name
-                out_path = self.out_dir / filename
+                out_path = official_dir / filename
                 if out_path.exists():
                     print(f"[DEBUG] Skipping existing {filename}", file=sys.stderr)
                 else:
@@ -301,6 +310,9 @@ class EMMAIssuerDetailScraper(EMMABaseScraper):
 
         # --- FINANCIAL DISCLOSURES TAB ---
         await page.click("li[data-cid='t-fcd']")
+        # prepare directory for financial disclosures PDFs
+        fcd_dir = self.out_dir / "financial_disclosures"
+        fcd_dir.mkdir(exist_ok=True, parents=True)
         await page.wait_for_selector("select[name='lvFCD_length']", timeout=15000)
         await page.select_option("select[name='lvFCD_length']", value="100")
         await page.wait_for_timeout(1000)
@@ -313,7 +325,7 @@ class EMMAIssuerDetailScraper(EMMABaseScraper):
                 href = await a.get_attribute("href")
                 pdf_url = urljoin("https://emma.msrb.org", href)
                 filename = Path(urlparse(href).path).name
-                out_path = self.out_dir / filename
+                out_path = fcd_dir / filename
                 if out_path.exists():
                     print(f"[DEBUG] Skipping existing {filename}", file=sys.stderr)
                 else:
@@ -345,9 +357,27 @@ async def main():
     parser.add_argument("--cusip", help="CUSIP for security/details task")
     parser.add_argument("--state", help="State code (e.g. AK) for state_issuers task")
     parser.add_argument("--id", help="Issuer ID for issuer_detail task")
+    parser.add_argument("--output-dir", "-o", default="emma_output",
+                        help="Base output directory for downloads")
     args = parser.parse_args()
 
-    out_dir = Path(f"emma_output_{args.task}")
+    # validate required parameters per task
+    if args.task == "security" and not args.cusip:
+        parser.error("security task requires --cusip")
+    if args.task == "state_issuers" and not args.state:
+        parser.error("state_issuers task requires --state")
+    if args.task == "issuer_detail" and not args.id:
+        parser.error("issuer_detail task requires --id")
+
+    base_output = Path(args.output_dir)
+    # build output directory hierarchy: base/task/identifier
+    out_dir = base_output / args.task
+    if args.task == "security":
+        out_dir = out_dir / args.cusip
+    elif args.task == "state_issuers":
+        out_dir = out_dir / args.state
+    else:
+        out_dir = out_dir / args.id
     scraper = SCRAPERS[args.task](out_dir)
 
     params: Dict[str, Any] = {}
