@@ -104,7 +104,9 @@ class EMMABaseScraper(ABC):
                 print(f"[DEBUG] Navigating to {url}", file=sys.stderr)
                 await page.goto(url, wait_until="networkidle", timeout=60000)
                 await self.handle_consent(page, context)
-                await self.parse_and_save(page, context=context, **kwargs)
+                # perform parsing; capture return value for aggregations
+                result = await self.parse_and_save(page, context=context, **kwargs)
+                return result
             except PlaywrightTimeout as te:
                 print(f"[ERROR] Timeout at {url}: {te}", file=sys.stderr)
                 await page.screenshot(path=str(self.out_dir / "timeout.png"))
@@ -207,8 +209,10 @@ class EMMAStateIssuersScraper(EMMABaseScraper):
     def build_url(self, state: str, **_) -> str:
         return f"https://emma.msrb.org/IssuerHomePage/State?state={state}"
 
-    async def parse_and_save(self, page: Page, **kwargs) -> None:
-        state = kwargs["state"]
+    async def parse_and_save(self, page: Page, **kwargs):
+        state = kwargs.get("state")
+        # support aggregation mode: skip file write and return data
+        aggregate = kwargs.get("aggregate", False)
         # Set to 100 per page
         await page.wait_for_selector("select[name='lvIssuers_length']", timeout=15000)
         await page.select_option("select[name='lvIssuers_length']", value="100")
@@ -231,6 +235,9 @@ class EMMAStateIssuersScraper(EMMABaseScraper):
             await next_btn.click()
             await page.wait_for_timeout(1000)
 
+        # if aggregating, return collected rows without writing file
+        if aggregate:
+            return all_data
         issuers_file = self.out_dir / "issuers.csv"
         with open(issuers_file, "w", newline="") as f:
             writer = csv.writer(f)
@@ -364,6 +371,8 @@ async def main():
     parser.add_argument("task", choices=SCRAPERS.keys(), help="Which EMMA scrape task to run")
     parser.add_argument("--cusip", help="CUSIP for security/details task")
     parser.add_argument("--state", help="State code (e.g. AK) for state_issuers task")
+    parser.add_argument("--all-states", action="store_true",
+                        help="Run state_issuers for all states in data/us_states.csv and aggregate into one CSV")
     parser.add_argument("--id", help="Issuer ID for issuer_detail task")
     parser.add_argument("--output-dir", "-o", default="emma_output",
                         help="Base output directory for downloads")
@@ -372,10 +381,36 @@ async def main():
     # validate required parameters per task
     if args.task == "security" and not args.cusip:
         parser.error("security task requires --cusip")
-    if args.task == "state_issuers" and not args.state:
-        parser.error("state_issuers task requires --state")
+    if args.task == "state_issuers" and not args.state and not args.all_states:
+        parser.error("state_issuers task requires --state or --all-states")
+    if args.task == "state_issuers" and args.state and args.all_states:
+        parser.error("state_issuers task requires either --state or --all-states, not both")
     if args.task == "issuer_detail" and not args.id:
         parser.error("issuer_detail task requires --id")
+    # aggregate issuers for all states into a single CSV
+    if args.task == "state_issuers" and args.all_states:
+        base_output = Path(args.output_dir)
+        data_file = Path(__file__).parent / 'data' / 'us_states.csv'
+        aggregated = []
+        scraper = SCRAPERS['state_issuers'](base_output / 'state_issuers')
+        for row in csv.DictReader(data_file.open()):
+            state = row.get('Abbreviation')
+            if not state:
+                continue
+            print(f'[{state}] Scraping state issuers...', file=sys.stderr)
+            rows = await scraper.run(state=state, aggregate=True)
+            if rows:
+                for rec in rows:
+                    aggregated.append([state] + rec)
+        out_dir = base_output / 'state_issuers'
+        out_dir.mkdir(exist_ok=True, parents=True)
+        aggregated_file = out_dir / 'issuers.csv'
+        with open(aggregated_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['State', 'Issuer Name', 'Issuer ID', 'Issuer Type'])
+            writer.writerows(aggregated)
+        print(f"✅ Aggregated {len(aggregated)} issuers to {aggregated_file}", file=sys.stderr)
+        return
 
     base_output = Path(args.output_dir)
     # build output directory hierarchy: base/task/identifier
