@@ -1,0 +1,3 @@
+functions-framework
+cloudevents
+psycopg2-binary
