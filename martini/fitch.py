@@ -31,9 +31,8 @@ class FitchScraper:
 
     async def fetch_security_name(self) -> str:
         """
-        Launches a headless browser, adds headers and cookies, navigates to the search URL,
-        then waits up to 10 seconds for either a "No Results!" title or the result link to appear.
-        Raises if no results, returns the security name otherwise. Saves debug info on failure.
+        Searches Fitch Ratings for the security name by ISIN. Returns the name
+        or raises ValueError if no results. Only unexpected errors trigger debug dumps.
         """
         timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         debug_prefix = self.debug_dir / f"{self.isin}_{timestamp}"
@@ -62,7 +61,7 @@ class FitchScraper:
             try:
                 await page.goto(self.BASE_URL.format(isin=self.isin), timeout=60000)
 
-                # Race between "No Results!" and result link (10s)
+                # Kick off both waits
                 no_results_task = asyncio.create_task(
                     page.wait_for_selector('div.column__left.search__no-results--title', timeout=10000)
                 )
@@ -71,28 +70,31 @@ class FitchScraper:
                 )
 
                 done, pending = await asyncio.wait(
-                    {no_results_task, link_task},
-                    return_when=asyncio.FIRST_COMPLETED,
-                    timeout=10
+                    [no_results_task, link_task],
+                    return_when=asyncio.FIRST_COMPLETED
                 )
                 # Cancel whichever didn't complete
                 for task in pending:
                     task.cancel()
 
+                # Check which completed
                 if no_results_task in done:
-                    # Found no-results first
+                    # No results
                     raise ValueError(f"No results found for ISIN: {self.isin}")
 
-                # Otherwise, result link appeared
-                link_element = done.pop().result()
+                # Otherwise, link_task completed
+                link_element = link_task.result()
                 if not link_element:
                     raise ValueError("Result link not found")
 
                 name = await link_element.get_attribute("aria-label")
                 return name
 
-            except Exception as e:
-                # Save debugging info
+            except ValueError:
+                # expected: no results or missing link; propagate without debug dump
+                raise
+            except Exception:
+                # unexpected: save debug info then propagate
                 await page.screenshot(path=str(debug_prefix) + ".png", full_page=True)
                 html = await page.content()
                 (debug_prefix.with_suffix('.html')).write_text(html, encoding='utf-8')
@@ -125,7 +127,6 @@ def main():
         print(name)
     except Exception as e:
         print(f"Error: {e}")
-
 
 if __name__ == "__main__":
     main()
