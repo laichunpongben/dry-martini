@@ -1,26 +1,28 @@
-from pydantic import BaseModel
-from typing import List
+# schemas.py
+
+from pydantic import BaseModel, ConfigDict
+from typing import List, Optional
 
 class DocumentSchema(BaseModel):
     id: int
     doc_type: str
     url: str
 
-    class Config:
-        orm_mode = True
+    # enable .from_orm() / ORM-style parsing
+    model_config = ConfigDict(from_attributes=True)
 
 class SecuritySchema(BaseModel):
     id: int
     name: str
-    cusip: str | None
-    isin: str | None
-    sedol: str | None
+    cusip: Optional[str]
+    isin: Optional[str]
+    sedol: Optional[str]
 
     # ← NESTED DOCUMENTS
     documents: List[DocumentSchema] = []
 
-    class Config:
-        orm_mode = True
+    # enable .from_orm() / ORM-style parsing
+    model_config = ConfigDict(from_attributes=True)
 
 class DocumentCreate(BaseModel):
     doc_type: str
