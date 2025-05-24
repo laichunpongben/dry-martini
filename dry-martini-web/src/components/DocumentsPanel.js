@@ -1,19 +1,9 @@
 // src/components/DocumentsPanel.js
 import React from 'react';
-import {
-  Box,
-  Typography,
-  List,
-  ListItemButton,
-  Divider
-} from '@mui/material';
+import { Box, Typography, List, ListItemButton, Divider } from '@mui/material';
 import { titleCase } from '../utils/titleCase';
 
-export default function DocumentsPanel({
-  security,
-  selectedDoc,
-  setSelectedDoc
-}) {
+export default function DocumentsPanel({ security, selectedDoc, onDocumentClick }) {
   return (
     <Box>
       <Typography variant="h6" sx={{ color: 'text.primary', mb: 1 }}>
@@ -24,7 +14,7 @@ export default function DocumentsPanel({
           <React.Fragment key={doc.id}>
             <ListItemButton
               selected={selectedDoc?.id === doc.id}
-              onClick={() => setSelectedDoc(doc)}
+              onClick={() => onDocumentClick(doc)}
               sx={{ py: 0.5 }}
             >
               <Typography sx={{ color: 'text.primary' }}>

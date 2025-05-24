@@ -6,7 +6,6 @@ import ChartCard from './components/ChartCard';
 import DocumentsPanel from './components/DocumentsPanel';
 import PdfViewer from './components/PdfViewer';
 import { darkTheme } from './theme';
-import { titleCase } from './utils/titleCase';
 
 export default function App() {
   const [list, setList] = useState([]);
@@ -23,7 +22,7 @@ export default function App() {
   const limit = 100;
   const backend = process.env.REACT_APP_BACKEND_URL || 'http://localhost:6010';
 
-  // infinite scroll observer
+  // Infinite‐scroll observer
   const observer = useRef();
   const lastListItemRef = useCallback(node => {
     if (loading || search) return;
@@ -36,7 +35,7 @@ export default function App() {
     if (node) observer.current.observe(node);
   }, [loading, hasMore, search]);
 
-  // fetch list
+  // Fetch securities list
   useEffect(() => {
     setLoading(true);
     fetch(`${backend}/securities?skip=${skip}&limit=${limit}`)
@@ -53,40 +52,48 @@ export default function App() {
       .finally(() => setLoading(false));
   }, [skip, backend]);
 
-  // set page title
+  // Set document title once
   useEffect(() => {
     document.title = 'Bond Explorer';
   }, []);
 
-  // load one security
+  // Load security metadata only
   const loadSecurity = isin => {
     setLoading(true);
     setError(null);
     setSecurity(null);
     setSelectedDoc(null);
     setSelectedIsin(isin);
+    setBlobCache({});  // clear prior cache
 
     fetch(`${backend}/securities/${isin}`)
       .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
-      .then(async data => {
+      .then(data => {
         setSecurity(data);
-        setSelectedDoc(data.documents[0] || null);
-        const newCache = {};
-        await Promise.all(
-          data.documents.map(async doc => {
-            try {
-              const res = await fetch(doc.url);
-              const blob = await res.blob();
-              newCache[doc.id] = URL.createObjectURL(blob);
-            } catch {
-              newCache[doc.id] = doc.url;
-            }
-          })
-        );
-        setBlobCache(newCache);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  // Download only the clicked document
+  const onDocumentClick = async doc => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(doc.url);
+      if (!res.ok) throw new Error('Failed to fetch document');
+      const blob = await res.blob();
+      setBlobCache(prev => ({
+        ...prev,
+        [doc.id]: URL.createObjectURL(blob)
+      }));
+      setSelectedDoc(doc);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filtered = list.filter(
@@ -123,7 +130,7 @@ export default function App() {
             <DocumentsPanel
               security={security}
               selectedDoc={selectedDoc}
-              setSelectedDoc={setSelectedDoc}
+              onDocumentClick={onDocumentClick}
             />
           )}
         </Box>
