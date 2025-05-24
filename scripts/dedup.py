@@ -12,11 +12,7 @@ if not raw_url:
     print("Error: POSTGRES_CONNECTION not set in .env.local", file=sys.stderr)
     sys.exit(1)
 
-# Strip asyncpg suffix if present so psycopg2 can parse
-if raw_url.startswith("postgresql+asyncpg://"):
-    DATABASE_URL = raw_url.replace("postgresql+asyncpg://", "postgresql://", 1)
-else:
-    DATABASE_URL = raw_url
+DATABASE_URL = raw_url
 
 def main():
     with psycopg2.connect(DATABASE_URL) as conn:

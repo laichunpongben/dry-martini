@@ -1,3 +1,5 @@
+# db.py
+
 import os
 from pathlib import Path
 
@@ -14,9 +16,17 @@ DATABASE_URL = os.getenv("POSTGRES_CONNECTION")
 if not DATABASE_URL:
     raise RuntimeError("POSTGRES_CONNECTION is not set in .env.local")
 
+# Swap in the asyncpg protocol if needed
+if DATABASE_URL.startswith("postgresql://"):
+    ASYNC_DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://", "postgresql+asyncpg://", 1
+    )
+else:
+    ASYNC_DATABASE_URL = DATABASE_URL  # assume user already provided async URL
+
 # Async engine
 engine = create_async_engine(
-    DATABASE_URL,
+    ASYNC_DATABASE_URL,
     echo=False,
     future=True,
     pool_pre_ping=True,
