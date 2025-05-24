@@ -125,5 +125,35 @@ cython_debug/
 .vscode/
 .idea/
 
-# custom
+# === React / Node.js ===
+# Dependencies
+node_modules/                                            
+
+# Production builds
+build/                                                   
+dist/                                                    
+
+# Debug logs
+npm-debug.log*                                           :contentReference[oaicite:7]{index=7}
+yarn-debug.log*                                          :contentReference[oaicite:8]{index=8}
+
+# Local env files
+.env.local                                               :contentReference[oaicite:9]{index=9}
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Testing and coverage
+coverage/                                                :contentReference[oaicite:10]{index=10}
+jest/                                                    
+.cache/                                                  :contentReference[oaicite:11]{index=11}
+.eslintcache                                             :contentReference[oaicite:12]{index=12}
+
+# Miscellaneous
+.DS_Store                                                :contentReference[oaicite:13]{index=13}
+
+# Parcel cache (if used)
+.parcel-cache/                                           :contentReference[oaicite:14]{index=14}
+
+# === custom ===
 secrets/
