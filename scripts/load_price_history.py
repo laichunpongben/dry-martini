@@ -13,6 +13,7 @@ from martini.frankfurt import FrankfurtScraper
 # 1) Load environment variables from .env.local
 load_dotenv(dotenv_path=".env.local")
 
+
 def insert_price_history(df: pd.DataFrame, dsn: str, isin: str):
     conn = psycopg2.connect(dsn)
     cur = conn.cursor()
@@ -21,7 +22,10 @@ def insert_price_history(df: pd.DataFrame, dsn: str, isin: str):
     cur.execute("SELECT id FROM securities WHERE isin = %s", (isin,))
     row = cur.fetchone()
     if not row:
-        raise ValueError(f"ISIN {isin} not found in securities table")
+        print(f"⚠️ ISIN {isin} not found in securities table, skipping.")
+        cur.close()
+        conn.close()
+        return
     security_id = row[0]
 
     records = []
@@ -67,41 +71,73 @@ def insert_price_history(df: pd.DataFrame, dsn: str, isin: str):
     conn.close()
     print(f"Inserted/Updated {len(records)} rows for ISIN {isin}")
 
+
+def fetch_all_isins(dsn: str):
+    """
+    Fetches all non-null ISIN codes from securities table.
+    """
+    conn = psycopg2.connect(dsn)
+    cur = conn.cursor()
+    cur.execute("SELECT isin FROM securities WHERE isin IS NOT NULL;")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [r[0] for r in rows]
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fetch price history via FrankfurtScraper and insert into Postgres"
     )
-    parser.add_argument("isin", help="ISIN code to process, e.g. DE000A383J95")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--isin", help="Single ISIN code to process, e.g. DE000A383J95")
+    group.add_argument("--all", action="store_true", help="Process all ISINs from securities table")
+    parser.add_argument(
+        "--save-csv",
+        action="store_true",
+        default=False,
+        help="Save intermediate CSV files (default: no)"
+    )
+
     args = parser.parse_args()
 
-    # Read Postgres DSN from environment
     dsn = os.getenv("POSTGRES_CONNECTION")
     if not dsn:
         parser.error("Environment variable POSTGRES_CONNECTION not set (from .env.local)")
 
+    if args.all:
+        isins = fetch_all_isins(dsn)
+    else:
+        isins = [args.isin]
+
     scraper = FrankfurtScraper()
-    df = asyncio.run(scraper.fetch_price_history(args.isin))
 
-    # If the scraper returned no data, exit gracefully
-    if df.empty:
-        print(f"❌ No price history for ISIN {args.isin}, nothing to do.")
-        return
+    for isin in isins:
+        print(f"\n🔄 Processing ISIN: {isin}")
+        try:
+            df = asyncio.run(scraper.fetch_price_history(isin))
+        except Exception as e:
+            print(f"❌ Error fetching data for {isin}: {e}")
+            continue
 
-    # Normalize columns: strip spaces, lowercase, replace spaces with underscores
-    df.columns = (
-        df.columns
-          .str.strip()
-          .str.lower()
-          .str.replace(' ', '_', regex=False)
-    )
+        if df.empty:
+            print(f"❌ No price history for ISIN {isin}, skipping.")
+            continue
 
-    # 3) Optionally save to CSV
-    csv_path = f"price_history_{args.isin}.csv"
-    df.to_csv(csv_path, index=False)
-    print(f"Saved intermediate CSV to {csv_path}")
+        df.columns = (
+            df.columns
+              .str.strip()
+              .str.lower()
+              .str.replace(' ', '_', regex=False)
+        )
 
-    # 4) Insert into Postgres
-    insert_price_history(df, dsn, args.isin)
+        if args.save_csv:
+            csv_path = f"price_history_{isin}.csv"
+            df.to_csv(csv_path, index=False)
+            print(f"💾 Saved intermediate CSV to {csv_path}")
+
+        insert_price_history(df, dsn, isin)
+
 
 if __name__ == "__main__":
     main()
