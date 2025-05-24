@@ -1,5 +1,5 @@
 // src/components/Sidebar.js
-import React, { useRef, useCallback } from 'react';
+import React from 'react';
 import {
   Box,
   TextField,
@@ -28,7 +28,7 @@ export default function Sidebar({
   return (
     <Box
       sx={{
-        width: 280,
+        width: 420,               // increased from 280 to 420 (50% wider)
         p: 1,
         borderRight: '1px solid #333',
         bgcolor: 'background.paper',
@@ -70,7 +70,7 @@ export default function Sidebar({
             >
               <ListItemButton
                 selected={selectedIsin === s.isin}
-                onClick={() => loadSecurity(s.isin)}
+                onMouseEnter={() => loadSecurity(s.isin, idx)}
                 sx={{ py: 0.5 }}
               >
                 <Typography
@@ -78,7 +78,7 @@ export default function Sidebar({
                   variant="body2"
                   sx={{ color: 'text.primary', width: '100%' }}
                 >
-                  {s.isin} − {s.name}
+                  {s.isin} – {s.name}
                 </Typography>
               </ListItemButton>
               {loading && selectedIsin === s.isin && (
