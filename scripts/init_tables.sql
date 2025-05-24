@@ -76,3 +76,43 @@ CREATE TABLE access_logs (
   client_ip INET,
   user_agent TEXT
 );
+
+-- Create a view that shows each security’s popularity metrics
+CREATE VIEW security_popularity (
+  id,
+  name,
+  isin,
+  fund_count,
+  access_count,
+  doc_count,
+  popularity
+) AS
+SELECT
+  s.id,
+  s.name,
+  s.isin,
+  COALESCE(fh.fund_count, 0)   AS fund_count,
+  COALESCE(al.access_count, 0) AS access_count,
+  COALESCE(doc.doc_count, 0)   AS doc_count,
+  (
+    COALESCE(fh.fund_count, 0)
+    + COALESCE(al.access_count, 0)
+    + COALESCE(doc.doc_count, 0)
+  ) AS popularity
+FROM securities s
+LEFT JOIN (
+  SELECT security_id, COUNT(DISTINCT fund_id) AS fund_count
+  FROM fund_holdings
+  GROUP BY security_id
+) fh ON fh.security_id = s.id
+LEFT JOIN (
+  SELECT security_id, COUNT(*) AS access_count
+  FROM access_logs
+  GROUP BY security_id
+) al ON al.security_id = s.id
+LEFT JOIN (
+  SELECT security_id, COUNT(*) AS doc_count
+  FROM documents
+  GROUP BY security_id
+) doc ON doc.security_id = s.id
+ORDER BY popularity DESC;
