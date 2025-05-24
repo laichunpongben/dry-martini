@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import 'chart.js/auto';
 import { Chart } from 'chart.js';
@@ -45,17 +45,51 @@ export default function App() {
   const [error, setError] = useState(null);
   const [blobCache, setBlobCache] = useState({});
   const [selectedIsin, setSelectedIsin] = useState(null);
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
+  const limit = 100;
   const backend = process.env.REACT_APP_BACKEND_URL || 'http://localhost:6010';
 
+  // IntersectionObserver for infinite scroll (only when not filtering)
+  const observer = useRef();
+  const lastListItemRef = useCallback(node => {
+    if (loading || search) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        setSkip(prev => prev + limit);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loading, hasMore, search]);
+
+  // Fetch paginated list, dedupe by ISIN
   useEffect(() => {
-    fetch(`${backend}/securities`)
-      .then(r => r.json())
-      .then(setList)
-      .catch(console.error);
+    setLoading(true);
+    fetch(`${backend}/securities?skip=${skip}&limit=${limit}`)
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load securities');
+        return r.json();
+      })
+      .then(newItems => {
+        setList(prev => {
+          const existing = new Set(prev.map(i => i.isin));
+          const unique = newItems.filter(item => !existing.has(item.isin));
+          return [...prev, ...unique];
+        });
+        setHasMore(newItems.length === limit);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [skip, backend]);
+
+  // Set title on mount
+  useEffect(() => {
     document.title = 'Bond Explorer';
   }, []);
 
+  // Load detail for one security
   const loadSecurity = isin => {
     setLoading(true);
     setError(null);
@@ -89,6 +123,7 @@ export default function App() {
       .finally(() => setLoading(false));
   };
 
+  // Filtered view
   const filtered = list.filter(
     s =>
       s.isin.includes(search.toUpperCase()) ||
@@ -98,7 +133,7 @@ export default function App() {
   return (
     <ThemeProvider theme={darkTheme}>
       <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
-        {/* Left: Search + List */}
+        {/* Left Panel: Search + List */}
         <Box
           sx={{
             width: 280,
@@ -127,8 +162,12 @@ export default function App() {
           />
           <Box sx={{ flex: 1, overflowY: 'auto', mt: 1, '&::-webkit-scrollbar': { display: 'none' } }}>
             <List disablePadding>
-              {filtered.map(s => (
-                <Box key={s.isin} sx={{ position: 'relative' }}>
+              {(search ? filtered : list).map((s, idx) => (
+                <Box
+                  key={s.isin}
+                  sx={{ position: 'relative' }}
+                  ref={!search && idx === list.length - 1 ? lastListItemRef : null}
+                >
                   <ListItemButton
                     selected={selectedIsin === s.isin}
                     onClick={() => loadSecurity(s.isin)}
@@ -143,11 +182,12 @@ export default function App() {
                   )}
                 </Box>
               ))}
+              {loading && !search && skip > 0 && <LinearProgress />}
             </List>
           </Box>
         </Box>
 
-        {/* Center: Details + Documents */}
+        {/* Center Panel: Details + Documents */}
         <Box sx={{ width: 540, p: 2, overflowY: 'auto', bgcolor: 'background.default' }}>
           {error && (
             <Typography color="error" align="center">
@@ -159,12 +199,10 @@ export default function App() {
             <Box sx={{ mb: 2, width: '100%', aspectRatio: '1 / 1' }}>
               <Card sx={{ height: '100%', bgcolor: 'background.paper', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', pb: 0 }}>
-                  {/* Text section */}
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="h5" sx={{ color: 'text.primary', mb: 1 }}>
                       {security.name}
                     </Typography>
-                    {/* Swap ISIN and CUSIP */}
                     <Typography variant="body1" sx={{ color: 'text.secondary' }}>
                       <strong>ISIN:</strong> {security.isin}
                     </Typography>
@@ -176,8 +214,8 @@ export default function App() {
                     </Typography>
                   </Box>
 
-                  {/* Only show chart if data exists */}
-                  {security.price_history && security.price_history.length > 0 && (
+                  {/* Price Chart with hover-helping lines */}
+                  {security.price_history?.length > 0 && (
                     <Box sx={{ flex: 1, display: 'flex', alignItems: 'flex-end', width: '100%' }}>
                       <Line
                         data={{
@@ -188,8 +226,8 @@ export default function App() {
                               borderColor: '#90caf9',
                               fill: false,
                               tension: 0.1,
-                              pointRadius: 0,       // no dots
-                              pointHoverRadius: 0,  // no hover dots
+                              pointRadius: 0,
+                              pointHoverRadius: 0,
                             },
                           ],
                         }}
@@ -209,20 +247,32 @@ export default function App() {
                             tooltip: { mode: 'index', intersect: false },
                             annotation: {
                               annotations: {
-                                xLine: { type: 'line', scaleID: 'x', value: null, borderWidth: 1, borderDash: [4, 4], borderColor: '#90caf9' },
-                                yLine: { type: 'line', scaleID: 'y', value: null, borderWidth: 1, borderDash: [4, 4], borderColor: '#90caf9' },
+                                xLine: {
+                                  type: 'line',
+                                  scaleID: 'x',
+                                  value: null,
+                                  borderWidth: 1,
+                                  borderDash: [4, 4],
+                                  borderColor: '#90caf9',
+                                },
+                                yLine: {
+                                  type: 'line',
+                                  scaleID: 'y',
+                                  value: null,
+                                  borderWidth: 1,
+                                  borderDash: [4, 4],
+                                  borderColor: '#90caf9',
+                                },
                               },
                             },
                           },
-                          onHover: (event, chartElement) => {
-                            const chart = event.chart;
-                            const points = chart.getElementsAtEventForMode(event.native, 'nearest', { intersect: true }, false);
-                            if (points.length) {
-                              const { index } = points[0];
-                              const xValue = chart.data.labels[index];
-                              const yValue = chart.data.datasets[0].data[index];
-                              chart.options.plugins.annotation.annotations.xLine.value = xValue;
-                              chart.options.plugins.annotation.annotations.yLine.value = yValue;
+                          onHover: (event, elements, chart) => {
+                            if (elements.length) {
+                              const { index } = elements[0];
+                              const xVal = chart.data.labels[index];
+                              const yVal = chart.data.datasets[0].data[index];
+                              chart.options.plugins.annotation.annotations.xLine.value = xVal;
+                              chart.options.plugins.annotation.annotations.yLine.value = yVal;
                             } else {
                               chart.options.plugins.annotation.annotations.xLine.value = null;
                               chart.options.plugins.annotation.annotations.yLine.value = null;
@@ -239,6 +289,7 @@ export default function App() {
             </Box>
           )}
 
+          {/* Documents List */}
           {security && (
             <Box>
               <Typography variant="h6" sx={{ color: 'text.primary', mb: 1 }}>
@@ -262,10 +313,14 @@ export default function App() {
           )}
         </Box>
 
-        {/* Right: PDF Viewer */}
+        {/* Right Panel: PDF Viewer */}
         <Box sx={{ flex: 1, p: 2, bgcolor: 'background.default' }}>
           {selectedDoc && (
-            <Box component="iframe" src={blobCache[selectedDoc.id] || selectedDoc.url} sx={{ width: '100%', height: '100%', border: 'none' }} />
+            <Box
+              component="iframe"
+              src={blobCache[selectedDoc.id] || selectedDoc.url}
+              sx={{ width: '100%', height: '100%', border: 'none' }}
+            />
           )}
         </Box>
       </Box>
