@@ -1,0 +1,8 @@
+uvicorn
+fastapi
+sqlalchemy
+psycopg2-binary
+asyncpg
+python-dotenv
+functions-framework
+google-cloud-storage
