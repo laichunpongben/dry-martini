@@ -28,7 +28,7 @@ class SecuritySchema(BaseModel):
     cusip: Optional[str]
     isin: Optional[str]
     sedol: Optional[str]
-    documents: List[DocumentSchema]     = []
+    documents: List[DocumentSchema] = []
     price_history: List[PriceHistorySchema] = []
 
     model_config = ConfigDict(from_attributes=True)
@@ -36,3 +36,9 @@ class SecuritySchema(BaseModel):
 class DocumentCreate(BaseModel):
     doc_type: str
     url: str
+
+class SecurityListItemSchema(BaseModel):
+    isin: Optional[str]
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)

@@ -9,25 +9,25 @@ from typing import AsyncGenerator, List
 
 from dotenv import load_dotenv
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from google.cloud import storage
-from google.oauth2 import service_account
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from google.cloud import storage
+from google.oauth2 import service_account
+
 from .db import AsyncSessionLocal, Base, engine
 from .models import Document, Security, PriceHistory, AccessLog
-from .schemas import DocumentCreate, DocumentSchema, SecuritySchema
+from .schemas import DocumentCreate, DocumentSchema, SecuritySchema, SecurityListItemSchema
 from .utils.logging_helper import logger
 
-# ── Load environment variables from .env.local at project root ──
+# ── Load environment variables ──
 ROOT_DIR = Path(__file__).parents[1]
 load_dotenv(dotenv_path=ROOT_DIR / ".env.local")
-# ───────────────────────────────────────────────────────────────
 
-# ----- Initialize GCS client once at startup -----
+# ----- Initialize GCS client -----
 credentials = service_account.Credentials.from_service_account_file(
     os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 )
@@ -50,10 +50,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down the application.")
 
-# Create FastAPI app with our lifespan
 app = FastAPI(lifespan=lifespan)
-
-# ----- CORS Middleware -----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -62,63 +59,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ----- Dependency: get async DB session -----
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
 
-# ----- Root endpoint -----
-@app.get("/")
+@app.get("/", response_model=dict)
 def root():
-    logger.info("Root endpoint called")
     return {"message": "Welcome to the Securities API"}
 
-# ----- List all securities (with documents) -----
-@app.get("/securities", response_model=List[SecuritySchema])
-async def list_securities(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
+@app.get("/securities", response_model=List[SecurityListItemSchema])
+async def list_securities(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    stmt = (
         select(Security)
-        .options(
-            selectinload(Security.documents),
-            selectinload(Security.price_history),
-        )
+        .where(Security.isin.isnot(None))
+        .offset(skip)
+        .limit(limit)
     )
+    result = await db.execute(stmt)
     return result.scalars().all()
 
-# ----- Get single security by ISIN (with signed URLs + price history) -----
 @app.get("/securities/{isin}", response_model=SecuritySchema)
-async def get_security_by_isin(
-    isin: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    # DEBUG: log the exact entry time (UTC) and converted local time (HKT)
+async def get_security_by_isin(isin: str, request: Request, db: AsyncSession = Depends(get_db)):
+    # fetch security and record access
     now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-    now_hkt = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
-    logger.debug(f"[get_security_by_isin] entered at {now_utc.isoformat()} UTC / {now_hkt.isoformat()} HKT")
-
-    # 1. Fetch security
     result = await db.execute(
         select(Security)
         .where(Security.isin == isin)
-        .options(
-            selectinload(Security.documents),
-            selectinload(Security.price_history),
-        )
+        .options(selectinload(Security.documents), selectinload(Security.price_history))
     )
     sec = result.scalar_one_or_none()
     if not sec:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Security with ISIN={isin} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Security with ISIN={isin} not found")
 
-    # 2. Record access in access_logs
-    ip_obj = None
     try:
         ip_obj = ipaddress.ip_address(request.client.host)
     except ValueError:
-        logger.warning(f"Invalid client IP: {request.client.host}")
+        ip_obj = None
 
     access = AccessLog(
         security_id=sec.id,
@@ -129,55 +105,35 @@ async def get_security_by_isin(
     db.add(access)
     await db.commit()
 
-    # 3. Generate signed URLs for documents
-    bucket = gcs_client.bucket(BUCKET_NAME)
+    # rewrite URLs to proxy endpoints
+    base = str(request.base_url).rstrip("/")
     for doc in sec.documents:
-        blob_name = doc.url.split(f"{BUCKET_NAME}/", 1)[-1]
-        blob = bucket.blob(blob_name)
-        signed_url = blob.generate_signed_url(
-            version="v4",
-            expiration=datetime.timedelta(minutes=15),
-            method="GET",
-        )
-        doc.url = signed_url
+        doc.url = f"{base}/documents/{doc.id}/proxy"
 
     return sec
 
-# ----- Attach a new document to a security -----
-@app.post(
-    "/securities/{isin}/documents",
-    response_model=DocumentSchema,
-    status_code=201
-)
-async def add_document_to_security(
-    isin: str,
-    payload: DocumentCreate,
-    db: AsyncSession = Depends(get_db),
-):
+@app.post("/securities/{isin}/documents", response_model=DocumentSchema, status_code=201)
+async def add_document_to_security(isin: str, payload: DocumentCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Security).where(Security.isin == isin))
     sec = result.scalar_one_or_none()
     if not sec:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Security with ISIN={isin} not found"
-        )
-
-    doc = Document(
-        security_id=sec.id,
-        doc_type=payload.doc_type,
-        url=payload.url
-    )
+        raise HTTPException(status_code=404, detail=f"Security with ISIN={isin} not found")
+    doc = Document(security_id=sec.id, doc_type=payload.doc_type, url=payload.url)
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
-
     return doc
 
-# ----- Uvicorn entry point -----
+@app.get("/documents/{doc_id}/proxy")
+async def proxy_document(doc_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Document).where(Document.id == doc_id))
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    bucket = gcs_client.bucket(BUCKET_NAME)
+    blob_name = doc.url.split(f"{BUCKET_NAME}/", 1)[-1]
+    data = bucket.blob(blob_name).download_as_bytes()
+    return Response(content=data, media_type="application/pdf")
+
 if __name__ == "__main__":
-    uvicorn.run(
-        "martini.main:app",
-        host="::",
-        port=6010,
-        reload=True,
-    )
+    uvicorn.run("martini.main:app", host="::", port=6010, reload=True)
