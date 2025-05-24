@@ -67,3 +67,12 @@ CREATE TABLE public.price_history (
 -- Index to speed lookups by security and date
 CREATE INDEX idx_price_history_security_date
     ON public.price_history(security_id, date);
+
+
+CREATE TABLE access_logs (
+  id SERIAL PRIMARY KEY,
+  security_id INTEGER NOT NULL REFERENCES securities(id),
+  accessed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  client_ip INET,
+  user_agent TEXT
+);

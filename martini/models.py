@@ -1,6 +1,7 @@
-# models.py
+# martini/models.py
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Numeric
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, String, Date, Numeric
+from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import relationship
 from .db import Base
 
@@ -57,3 +58,18 @@ class PriceHistory(Base):
     volume_nominal = Column(Integer, nullable=True)
 
     security = relationship("Security", back_populates="price_history")
+
+class AccessLog(Base):
+    __tablename__ = "access_logs"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    security_id  = Column(
+        Integer,
+        ForeignKey("securities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    accessed_at  = Column(DateTime(timezone=True), nullable=False)
+    client_ip    = Column(INET, nullable=True)
+    user_agent   = Column(String, nullable=True)
+
+    security = relationship("Security")

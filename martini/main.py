@@ -1,14 +1,15 @@
-# main.py
+# martini/main.py
 
 import datetime
 import os
+import ipaddress
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, List
 
 from dotenv import load_dotenv
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -17,7 +18,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from .db import AsyncSessionLocal, Base, engine
-from .models import Document, Security, PriceHistory
+from .models import Document, Security, PriceHistory, AccessLog
 from .schemas import DocumentCreate, DocumentSchema, SecuritySchema
 from .utils.logging_helper import logger
 
@@ -84,12 +85,19 @@ async def list_securities(db: AsyncSession = Depends(get_db)):
     )
     return result.scalars().all()
 
-# ----- Get single security by ISIN (with signed document URLs + price history) -----
+# ----- Get single security by ISIN (with signed URLs + price history) -----
 @app.get("/securities/{isin}", response_model=SecuritySchema)
 async def get_security_by_isin(
     isin: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    # DEBUG: log the exact entry time (UTC) and converted local time (HKT)
+    now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+    now_hkt = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+    logger.debug(f"[get_security_by_isin] entered at {now_utc.isoformat()} UTC / {now_hkt.isoformat()} HKT")
+
+    # 1. Fetch security
     result = await db.execute(
         select(Security)
         .where(Security.isin == isin)
@@ -105,7 +113,23 @@ async def get_security_by_isin(
             detail=f"Security with ISIN={isin} not found"
         )
 
-    # generate signed URLs for documents
+    # 2. Record access in access_logs
+    ip_obj = None
+    try:
+        ip_obj = ipaddress.ip_address(request.client.host)
+    except ValueError:
+        logger.warning(f"Invalid client IP: {request.client.host}")
+
+    access = AccessLog(
+        security_id=sec.id,
+        accessed_at=now_utc,
+        client_ip=ip_obj,
+        user_agent=request.headers.get("user-agent", "")
+    )
+    db.add(access)
+    await db.commit()
+
+    # 3. Generate signed URLs for documents
     bucket = gcs_client.bucket(BUCKET_NAME)
     for doc in sec.documents:
         blob_name = doc.url.split(f"{BUCKET_NAME}/", 1)[-1]
