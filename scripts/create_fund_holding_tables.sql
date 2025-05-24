@@ -47,3 +47,23 @@ CREATE UNIQUE INDEX uniq_securities_isin
 CREATE UNIQUE INDEX uniq_securities_sedol
   ON public.securities(sedol)
   WHERE sedol IS NOT NULL;                                         :contentReference[oaicite:2]{index=2}
+
+
+CREATE TABLE public.price_history (
+    id               SERIAL PRIMARY KEY,
+    security_id      INTEGER NOT NULL
+                       REFERENCES public.securities(id)
+                       ON DELETE CASCADE,
+    date             DATE    NOT NULL,
+    open             NUMERIC(12,6) NOT NULL,
+    close            NUMERIC(12,6) NOT NULL,
+    high             NUMERIC(12,6) NOT NULL,
+    low              NUMERIC(12,6) NOT NULL,
+    volume           INTEGER,            -- 4 bytes instead of 8 bytes
+    volume_nominal   INTEGER,            -- also 4 bytes
+    UNIQUE(security_id, date)
+);
+
+-- Index to speed lookups by security and date
+CREATE INDEX idx_price_history_security_date
+    ON public.price_history(security_id, date);
