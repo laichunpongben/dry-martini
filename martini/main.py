@@ -11,8 +11,10 @@ from dotenv import load_dotenv
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+
+from sqlalchemy import MetaData, Table, Column, Integer, String, select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy.future import select as orm_select
 from sqlalchemy.orm import selectinload
 
 from google.cloud import storage
@@ -41,7 +43,7 @@ async def init_models():
         await conn.run_sync(Base.metadata.create_all)
     logger.debug("Database tables initialized.")
 
-# ----- Lifespan handler -----
+# ----- Lifespan handler ──
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up the application.")
@@ -67,23 +69,50 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 def root():
     return {"message": "Welcome to the Securities API"}
 
+# ── Manually declare the security_popularity view ──
+metadata = MetaData()
+security_popularity = Table(
+    "security_popularity",
+    metadata,
+    Column("id", Integer),
+    Column("name", String),
+    Column("isin", String),
+    Column("fund_count", Integer),
+    Column("access_count", Integer),
+    Column("doc_count", Integer),
+    Column("popularity", Integer),
+)
+
 @app.get("/securities", response_model=List[SecurityListItemSchema])
 async def list_securities(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    """
+    List securities ordered by descending popularity, omitting null ISINs.
+    """
     stmt = (
-        select(Security)
-        .where(Security.isin.isnot(None))
+        select(
+            security_popularity.c.id,
+            security_popularity.c.name,
+            security_popularity.c.isin,
+        )
+        .where(security_popularity.c.isin.is_not(None))
+        .order_by(desc(security_popularity.c.popularity))
         .offset(skip)
         .limit(limit)
     )
     result = await db.execute(stmt)
-    return result.scalars().all()
+    rows = result.all()
+
+    return [
+        SecurityListItemSchema(id=row.id, name=row.name, isin=row.isin)
+        for row in rows
+    ]
 
 @app.get("/securities/{isin}", response_model=SecuritySchema)
 async def get_security_by_isin(isin: str, request: Request, db: AsyncSession = Depends(get_db)):
     # fetch security and record access
     now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
     result = await db.execute(
-        select(Security)
+        orm_select(Security)
         .where(Security.isin == isin)
         .options(selectinload(Security.documents), selectinload(Security.price_history))
     )
@@ -100,7 +129,7 @@ async def get_security_by_isin(isin: str, request: Request, db: AsyncSession = D
         security_id=sec.id,
         accessed_at=now_utc,
         client_ip=ip_obj,
-        user_agent=request.headers.get("user-agent", "")
+        user_agent=request.headers.get("user-agent", ""),
     )
     db.add(access)
     await db.commit()
@@ -114,7 +143,7 @@ async def get_security_by_isin(isin: str, request: Request, db: AsyncSession = D
 
 @app.post("/securities/{isin}/documents", response_model=DocumentSchema, status_code=201)
 async def add_document_to_security(isin: str, payload: DocumentCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Security).where(Security.isin == isin))
+    result = await db.execute(orm_select(Security).where(Security.isin == isin))
     sec = result.scalar_one_or_none()
     if not sec:
         raise HTTPException(status_code=404, detail=f"Security with ISIN={isin} not found")
@@ -126,7 +155,7 @@ async def add_document_to_security(isin: str, payload: DocumentCreate, db: Async
 
 @app.get("/documents/{doc_id}/proxy")
 async def proxy_document(doc_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Document).where(Document.id == doc_id))
+    result = await db.execute(orm_select(Document).where(Document.id == doc_id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
