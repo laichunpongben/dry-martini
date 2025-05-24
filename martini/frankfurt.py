@@ -44,12 +44,24 @@ class FrankfurtScraper:
                     "input#mat-input-0"
                 )
                 await page.keyboard.type(isin, delay=TYPE_DELAY)
-                await page.wait_for_selector(
-                    "div.global-search-result-option", timeout=DEFAULT_TIMEOUT
-                )
+
+                # Wait for suggestion elements; if none appear, treat as missing
+                try:
+                    await page.wait_for_selector(
+                        "div.global-search-result-option", timeout=DEFAULT_TIMEOUT
+                    )
+                except PlaywrightTimeoutError:
+                    print(f"⚠️ ISIN '{isin}' not found on Börse Frankfurt. No data returned.")
+                    return pd.DataFrame()
+
+                # Choose the matching suggestion
                 suggestion = page.locator(
                     f"div.global-search-result-option:has(.isin:has-text('{isin}'))"
                 )
+                if await suggestion.count() == 0:
+                    print(f"⚠️ ISIN '{isin}' not found in suggestions. No data returned.")
+                    return pd.DataFrame()
+
                 await suggestion.click(force=True)
                 await page.wait_for_timeout(DEFAULT_TIMEOUT)
 

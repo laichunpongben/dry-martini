@@ -74,12 +74,18 @@ def main():
     parser.add_argument("isin", help="ISIN code to process, e.g. DE000A383J95")
     args = parser.parse_args()
 
+    # Read Postgres DSN from environment
     dsn = os.getenv("POSTGRES_CONNECTION")
     if not dsn:
         parser.error("Environment variable POSTGRES_CONNECTION not set (from .env.local)")
 
     scraper = FrankfurtScraper()
     df = asyncio.run(scraper.fetch_price_history(args.isin))
+
+    # If the scraper returned no data, exit gracefully
+    if df.empty:
+        print(f"❌ No price history for ISIN {args.isin}, nothing to do.")
+        return
 
     # Normalize columns: strip spaces, lowercase, replace spaces with underscores
     df.columns = (
