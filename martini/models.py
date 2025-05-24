@@ -1,27 +1,59 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+# models.py
+
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Numeric
 from sqlalchemy.orm import relationship
 from .db import Base
 
 class Security(Base):
     __tablename__ = "securities"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    cusip = Column(String(12), unique=True, nullable=True)
-    isin = Column(String(15), unique=True, nullable=True)
-    sedol = Column(String(12), unique=True, nullable=True)
+    id     = Column(Integer, primary_key=True, index=True)
+    name   = Column(String, nullable=False)
+    cusip  = Column(String(12), unique=True, nullable=True)
+    isin   = Column(String(15), unique=True, nullable=True)
+    sedol  = Column(String(12), unique=True, nullable=True)
 
-    # ← NEW RELATIONSHIP
-    documents = relationship("Document", back_populates="security", cascade="all, delete-orphan")
-
+    documents     = relationship(
+        "Document",
+        back_populates="security",
+        cascade="all, delete-orphan"
+    )
+    price_history = relationship(
+        "PriceHistory",
+        back_populates="security",
+        order_by="PriceHistory.date",
+        cascade="all, delete-orphan"
+    )
 
 class Document(Base):
     __tablename__ = "documents"
 
-    id = Column(Integer, primary_key=True, index=True)
-    security_id = Column(Integer, ForeignKey("securities.id", ondelete="CASCADE"), nullable=False)
+    id          = Column(Integer, primary_key=True, index=True)
+    security_id = Column(
+        Integer,
+        ForeignKey("securities.id", ondelete="CASCADE"),
+        nullable=False
+    )
     doc_type = Column(String, nullable=False)
-    url = Column(String, nullable=False)
+    url      = Column(String, nullable=False)
 
-    # ← BACK‐REFERENCE
     security = relationship("Security", back_populates="documents")
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    security_id    = Column(
+        Integer,
+        ForeignKey("securities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    date           = Column(Date, nullable=False)
+    open           = Column(Numeric(12, 6), nullable=False)
+    close          = Column(Numeric(12, 6), nullable=False)
+    high           = Column(Numeric(12, 6), nullable=False)
+    low            = Column(Numeric(12, 6), nullable=False)
+    volume         = Column(Integer, nullable=True)
+    volume_nominal = Column(Integer, nullable=True)
+
+    security = relationship("Security", back_populates="price_history")

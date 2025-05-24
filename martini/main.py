@@ -1,3 +1,5 @@
+# main.py
+
 import datetime
 import os
 from contextlib import asynccontextmanager
@@ -15,7 +17,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from .db import AsyncSessionLocal, Base, engine
-from .models import Document, Security
+from .models import Document, Security, PriceHistory
 from .schemas import DocumentCreate, DocumentSchema, SecuritySchema
 from .utils.logging_helper import logger
 
@@ -74,11 +76,15 @@ def root():
 @app.get("/securities", response_model=List[SecuritySchema])
 async def list_securities(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Security).options(selectinload(Security.documents))
+        select(Security)
+        .options(
+            selectinload(Security.documents),
+            selectinload(Security.price_history),
+        )
     )
     return result.scalars().all()
 
-# ----- Get single security by ISIN (with signed document URLs) -----
+# ----- Get single security by ISIN (with signed document URLs + price history) -----
 @app.get("/securities/{isin}", response_model=SecuritySchema)
 async def get_security_by_isin(
     isin: str,
@@ -87,7 +93,10 @@ async def get_security_by_isin(
     result = await db.execute(
         select(Security)
         .where(Security.isin == isin)
-        .options(selectinload(Security.documents))
+        .options(
+            selectinload(Security.documents),
+            selectinload(Security.price_history),
+        )
     )
     sec = result.scalar_one_or_none()
     if not sec:
@@ -96,6 +105,7 @@ async def get_security_by_isin(
             detail=f"Security with ISIN={isin} not found"
         )
 
+    # generate signed URLs for documents
     bucket = gcs_client.bucket(BUCKET_NAME)
     for doc in sec.documents:
         blob_name = doc.url.split(f"{BUCKET_NAME}/", 1)[-1]

@@ -1,5 +1,6 @@
 # schemas.py
 
+from datetime import date
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
@@ -8,7 +9,17 @@ class DocumentSchema(BaseModel):
     doc_type: str
     url: str
 
-    # enable .from_orm() / ORM-style parsing
+    model_config = ConfigDict(from_attributes=True)
+
+class PriceHistorySchema(BaseModel):
+    date: date
+    open: float
+    close: float
+    high: float
+    low: float
+    volume: Optional[int]
+    volume_nominal: Optional[int]
+
     model_config = ConfigDict(from_attributes=True)
 
 class SecuritySchema(BaseModel):
@@ -17,11 +28,9 @@ class SecuritySchema(BaseModel):
     cusip: Optional[str]
     isin: Optional[str]
     sedol: Optional[str]
+    documents: List[DocumentSchema]     = []
+    price_history: List[PriceHistorySchema] = []
 
-    # ← NESTED DOCUMENTS
-    documents: List[DocumentSchema] = []
-
-    # enable .from_orm() / ORM-style parsing
     model_config = ConfigDict(from_attributes=True)
 
 class DocumentCreate(BaseModel):
