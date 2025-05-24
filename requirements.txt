@@ -6,3 +6,6 @@ asyncpg
 python-dotenv
 functions-framework
 google-cloud-storage
+aiofiles
+aiohttp
+pandas
