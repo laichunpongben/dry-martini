@@ -57,6 +57,29 @@ def register_document(cloud_event: CloudEvent) -> None:
 
 
 @functions_framework.cloud_event
+def register_document_delete(cloud_event: CloudEvent) -> None:
+    """Remove Postgres record when a GCS object is deleted."""
+    data = cloud_event.data
+    bucket = data.get("bucket")
+    name   = data.get("name")
+
+    logger.info("Delete event for gs://%s/%s", bucket, name)
+
+    url = f"https://storage.googleapis.com/{bucket}/{name}"
+    dsn = os.getenv("DB_DSN")
+    if not dsn:
+        logger.critical("DB_DSN is not set; cannot delete record")
+        return
+
+    with psycopg2.connect(dsn) as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM documents WHERE url = %s", (url,))
+        if cur.rowcount:
+            logger.info("✅ Deleted record for URL=%s", url)
+        else:
+            logger.warning("⚠️  No document record found for URL=%s", url)
+            
+
+@functions_framework.cloud_event
 def hello_gcs(cloud_event: CloudEvent) -> tuple:
     """This function is triggered by a change in a storage bucket."""
     data = cloud_event.data
