@@ -1,0 +1,1 @@
+gcloud functions deploy register_document   --gen2   --region=asia-southeast1   --runtime=python312   --source=./   --entry-point=register_document   --trigger-bucket=BUCKET   --set-env-vars=DB_DSN=""
