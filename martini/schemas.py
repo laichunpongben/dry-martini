@@ -41,6 +41,9 @@ class SecuritySchema(BaseModel):
     issue_currency: Optional[str] = None
     maturity: Optional[date]      = None
 
+    # ← new summary field
+    summary: Optional[str] = None
+
     documents: List[DocumentSchema]         = []
     price_history: List[PriceHistorySchema] = []
     fund_holdings: List[FundHoldingSchema]  = []

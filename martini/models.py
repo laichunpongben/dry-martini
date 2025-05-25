@@ -1,6 +1,6 @@
 # martini/models.py
 
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, String, Date, Numeric
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, String, Date, Numeric, Text
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import relationship
 from .db import Base
@@ -35,6 +35,30 @@ class Security(Base):
         "FundHolding",
         back_populates="security",
         cascade="all, delete-orphan"
+    )
+
+    # ← add one-to-one summary relationship
+    summary = relationship(
+        "SecuritySummary",
+        back_populates="security",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+class SecuritySummary(Base):
+    __tablename__ = "security_summaries"
+
+    security_id = Column(
+        Integer,
+        ForeignKey("securities.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    summary = Column(Text, nullable=False)
+
+    security = relationship(
+        "Security",
+        back_populates="summary",
+        uselist=False,
     )
 
 class Document(Base):

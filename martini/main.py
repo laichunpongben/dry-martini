@@ -21,8 +21,21 @@ from google.cloud import storage
 from google.oauth2 import service_account
 
 from .db import AsyncSessionLocal, Base, engine
-from .models import Document, Security, PriceHistory, AccessLog, Fund, FundHolding
-from .schemas import DocumentCreate, DocumentSchema, SecuritySchema, SecurityListItemSchema
+from .models import (
+    Document,
+    Security,
+    PriceHistory,
+    AccessLog,
+    Fund,
+    FundHolding,
+    SecuritySummary,
+)
+from .schemas import (
+    DocumentCreate,
+    DocumentSchema,
+    SecuritySchema,
+    SecurityListItemSchema
+)
 from .utils.logging_helper import logger
 
 # ── Load environment variables ──
@@ -98,7 +111,6 @@ async def list_securities(
     List securities ordered by the given sort field, omitting null ISINs.
     Newest issues (by issue_date) come first when sort=issue_date.
     """
-    # Base projection & filter
     stmt = (
         select(
             security_popularity.c.id,
@@ -108,15 +120,13 @@ async def list_securities(
         .where(security_popularity.c.isin.is_not(None))
     )
 
-    # Dynamic ordering
     if sort == "popularity":
         stmt = stmt.order_by(desc(security_popularity.c.popularity))
     elif sort == "isin":
         stmt = stmt.order_by(security_popularity.c.isin)
     elif sort == "name":
         stmt = stmt.order_by(security_popularity.c.name)
-    else:  # issue_date
-        # join back to securities to order by issue_date DESC
+    else:
         stmt = (
             stmt
             .join(Security, security_popularity.c.id == Security.id)
@@ -124,7 +134,6 @@ async def list_securities(
         )
 
     stmt = stmt.offset(skip).limit(limit)
-
     result = await db.execute(stmt)
     rows = result.all()
 
@@ -146,7 +155,8 @@ async def get_security_by_isin(
         .where(Security.isin == isin)
         .options(
             selectinload(Security.documents),
-            selectinload(Security.price_history)
+            selectinload(Security.price_history),
+            selectinload(Security.summary),
         )
     )
     result = await db.execute(sec_q)
@@ -185,13 +195,21 @@ async def get_security_by_isin(
         for fn, pct in holdings_res.all()
     ]
 
-    # Return only the explicit fields
+    # 2) Pull summary text
+    summary_text = sec.summary.summary if sec.summary else None
+
     return SecuritySchema(
         id=sec.id,
         name=sec.name,
         cusip=sec.cusip,
         isin=sec.isin,
         sedol=sec.sedol,
+        issuer_id=sec.issuer_id,
+        issue_date=sec.issue_date,
+        issue_volume=float(sec.issue_volume) if sec.issue_volume is not None else None,
+        issue_currency=sec.issue_currency,
+        maturity=sec.maturity,
+        summary=summary_text,           # ← include summary here
         documents=sec.documents,
         price_history=sec.price_history,
         fund_holdings=holdings,
