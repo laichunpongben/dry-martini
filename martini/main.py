@@ -89,13 +89,14 @@ async def list_securities(
     limit: int = 100,
     sort: str = Query(
         "popularity",
-        description="Sort field: popularity (default), isin, or name",
-        regex="^(popularity|isin|name)$"
+        description="Sort field: popularity (default), isin, name, or issue_date",
+        regex="^(popularity|isin|name|issue_date)$"
     ),
     db: AsyncSession = Depends(get_db)
 ):
     """
     List securities ordered by the given sort field, omitting null ISINs.
+    Newest issues (by issue_date) come first when sort=issue_date.
     """
     # Base projection & filter
     stmt = (
@@ -112,8 +113,15 @@ async def list_securities(
         stmt = stmt.order_by(desc(security_popularity.c.popularity))
     elif sort == "isin":
         stmt = stmt.order_by(security_popularity.c.isin)
-    else:  # name
+    elif sort == "name":
         stmt = stmt.order_by(security_popularity.c.name)
+    else:  # issue_date
+        # join back to securities to order by issue_date DESC
+        stmt = (
+            stmt
+            .join(Security, security_popularity.c.id == Security.id)
+            .order_by(desc(Security.issue_date))
+        )
 
     stmt = stmt.offset(skip).limit(limit)
 
