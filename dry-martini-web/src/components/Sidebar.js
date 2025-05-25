@@ -1,5 +1,5 @@
 // src/components/Sidebar.js
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   TextField,
@@ -9,8 +9,11 @@ import {
   ListItemButton,
   Typography,
   LinearProgress,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import SortIcon from '@mui/icons-material/Sort';  // updated icon import
 
 export default function Sidebar({
   list,
@@ -21,14 +24,25 @@ export default function Sidebar({
   loadSecurity,
   loading,
   skip,
-  lastListItemRef
+  lastListItemRef,
+  sortMethod,
+  setSortMethod
 }) {
   const displayList = search ? filtered : list;
+
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+  const handleClick = (event) => setAnchorEl(event.currentTarget);
+  const handleClose = () => setAnchorEl(null);
+  const handleSortSelect = (method) => {
+    if (method !== sortMethod) setSortMethod(method);
+    handleClose();
+  };
 
   return (
     <Box
       sx={{
-        width: 420,               // increased from 280 to 420 (50% wider)
+        width: 420,
         p: 1,
         borderRight: '1px solid #333',
         bgcolor: 'background.paper',
@@ -36,22 +50,56 @@ export default function Sidebar({
         flexDirection: 'column',
       }}
     >
-      <TextField
-        size="small"
-        placeholder="Search ISIN or name"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        InputProps={{
-          sx: { bgcolor: 'background.default', color: 'text.primary' },
-          endAdornment: (
-            <InputAdornment position="end">
-              <IconButton>
-                <SearchIcon sx={{ color: 'text.primary' }} />
-              </IconButton>
-            </InputAdornment>
-          ),
-        }}
-      />
+      {/* Search bar and sort icon side by side */}
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <TextField
+          size="small"
+          placeholder="Search ISIN or name"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          fullWidth
+          InputProps={{
+            sx: { bgcolor: 'background.default', color: 'text.primary' },
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton>
+                  <SearchIcon sx={{ color: 'text.primary' }} />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+        <IconButton onClick={handleClick} sx={{ ml: 1 }}>
+          <SortIcon sx={{ color: 'text.primary' }} />
+        </IconButton>
+      </Box>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => handleSortSelect('popularity')}
+          selected={sortMethod === 'popularity'}
+        >
+          Popularity
+        </MenuItem>
+        <MenuItem
+          onClick={() => handleSortSelect('isin')}
+          selected={sortMethod === 'isin'}
+        >
+          ISIN
+        </MenuItem>
+        <MenuItem
+          onClick={() => handleSortSelect('name')}
+          selected={sortMethod === 'name'}
+        >
+          Name
+        </MenuItem>
+      </Menu>
 
       <Box
         sx={{

@@ -6,7 +6,7 @@ import TopBar from './components/TopBar';
 import ChartCard from './components/ChartCard';
 import DocumentsPanel from './components/DocumentsPanel';
 import PdfViewer from './components/PdfViewer';
-import FundHoldingsPanel from './components/FundHoldingsPanel';  // ← new import
+import FundHoldingsPanel from './components/FundHoldingsPanel';
 import { darkTheme } from './theme';
 
 export default function App() {
@@ -20,6 +20,7 @@ export default function App() {
   const [selectedIsin, setSelectedIsin] = useState(null);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [sortMethod, setSortMethod] = useState('popularity'); // new
 
   const securityCache = useRef({});
   const limit = 100;
@@ -41,7 +42,17 @@ export default function App() {
   // Fetch securities list
   useEffect(() => {
     setLoading(true);
-    fetch(`${backend}/securities?skip=${skip}&limit=${limit}`)
+    // reset list on sort change or search
+    setList([]);
+    setSkip(0);
+    setHasMore(true);
+  }, [sortMethod, search]);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams({ skip, limit });
+    if (!search) params.set('sort', sortMethod);
+    fetch(`${backend}/securities?${params.toString()}`)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(newItems => {
         setList(prev => {
@@ -53,7 +64,7 @@ export default function App() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [skip, backend]);
+  }, [skip, sortMethod, search, backend]);
 
   // Set document title once
   useEffect(() => {
@@ -131,9 +142,11 @@ export default function App() {
           loading={loading}
           skip={skip}
           lastListItemRef={lastListItemRef}
+          sortMethod={sortMethod}
+          setSortMethod={setSortMethod} // new props
         />
 
-        {/* Increase center panel width to 600, padding = 1 */}
+        {/* Center panel */}
         <Box sx={{ width: 600, p: 1, overflowY: 'auto', bgcolor: 'background.default' }}>
           {error && (
             <Typography color="error" align="center">
@@ -151,7 +164,6 @@ export default function App() {
             />
           )}
 
-          {/* New Fund Holdings section */}
           {security && (
             <FundHoldingsPanel holdings={security.fund_holdings} />
           )}
