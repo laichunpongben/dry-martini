@@ -6,6 +6,7 @@ import TopBar from './components/TopBar';
 import ChartCard from './components/ChartCard';
 import DocumentsPanel from './components/DocumentsPanel';
 import PdfViewer from './components/PdfViewer';
+import FundHoldingsPanel from './components/FundHoldingsPanel';  // ← new import
 import { darkTheme } from './theme';
 
 export default function App() {
@@ -148,6 +149,11 @@ export default function App() {
               selectedDoc={selectedDoc}
               onDocumentClick={onDocumentClick}
             />
+          )}
+
+          {/* New Fund Holdings section */}
+          {security && (
+            <FundHoldingsPanel holdings={security.fund_holdings} />
           )}
         </Box>
 
