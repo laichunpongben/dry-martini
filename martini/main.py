@@ -9,7 +9,7 @@ from typing import AsyncGenerator, List
 
 from dotenv import load_dotenv
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import MetaData, Table, Column, Integer, String, select, desc
@@ -84,10 +84,20 @@ security_popularity = Table(
 )
 
 @app.get("/securities", response_model=List[SecurityListItemSchema])
-async def list_securities(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+async def list_securities(
+    skip: int = 0,
+    limit: int = 100,
+    sort: str = Query(
+        "popularity",
+        description="Sort field: popularity (default), isin, or name",
+        regex="^(popularity|isin|name)$"
+    ),
+    db: AsyncSession = Depends(get_db)
+):
     """
-    List securities ordered by descending popularity, omitting null ISINs.
+    List securities ordered by the given sort field, omitting null ISINs.
     """
+    # Base projection & filter
     stmt = (
         select(
             security_popularity.c.id,
@@ -95,10 +105,18 @@ async def list_securities(skip: int = 0, limit: int = 100, db: AsyncSession = De
             security_popularity.c.isin,
         )
         .where(security_popularity.c.isin.is_not(None))
-        .order_by(desc(security_popularity.c.popularity))
-        .offset(skip)
-        .limit(limit)
     )
+
+    # Dynamic ordering
+    if sort == "popularity":
+        stmt = stmt.order_by(desc(security_popularity.c.popularity))
+    elif sort == "isin":
+        stmt = stmt.order_by(security_popularity.c.isin)
+    else:  # name
+        stmt = stmt.order_by(security_popularity.c.name)
+
+    stmt = stmt.offset(skip).limit(limit)
+
     result = await db.execute(stmt)
     rows = result.all()
 
@@ -159,7 +177,7 @@ async def get_security_by_isin(
         for fn, pct in holdings_res.all()
     ]
 
-    # Return only the explicit fields, avoiding **sec.__dict__
+    # Return only the explicit fields
     return SecuritySchema(
         id=sec.id,
         name=sec.name,
