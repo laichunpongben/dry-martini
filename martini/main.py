@@ -171,8 +171,13 @@ async def get_security_by_isin(
     db.add(access)
     await db.commit()
 
-    # proxy URLs
-    base = str(request.base_url).rstrip("/")
+    # proxy URLs — force HTTPS scheme
+    raw_base = str(request.base_url).rstrip("/")
+    if raw_base.startswith("http://"):
+        base = raw_base.replace("http://", "https://", 1)
+    else:
+        base = raw_base  # already https or custom scheme
+
     for doc in sec.documents:
         doc.url = f"{base}/documents/{doc.id}/proxy"
 
