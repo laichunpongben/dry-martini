@@ -1,20 +1,13 @@
-# db.py
+# martini/db.py
 
 import os
-from pathlib import Path
-
-from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Load environment variables from .env.local in project root
-env_path = Path(__file__).parent.parent / ".env.local"
-load_dotenv(dotenv_path=env_path)
-
-# Now read the Postgres URL
+# Read database URL from environment
 DATABASE_URL = os.getenv("POSTGRES_CONNECTION")
 if not DATABASE_URL:
-    raise RuntimeError("POSTGRES_CONNECTION is not set in .env.local")
+    raise RuntimeError("POSTGRES_CONNECTION is not set in environment variables")
 
 # Swap in the asyncpg protocol if needed
 if DATABASE_URL.startswith("postgresql://"):

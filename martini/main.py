@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, List
 
-from dotenv import load_dotenv
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,15 +37,9 @@ from .schemas import (
 )
 from .utils.logging_helper import logger
 
-# ── Load environment variables ──
-ROOT_DIR = Path(__file__).parents[1]
-load_dotenv(dotenv_path=ROOT_DIR / ".env.local")
 
 # ----- Initialize GCS client -----
-credentials = service_account.Credentials.from_service_account_file(
-    os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-)
-gcs_client = storage.Client(credentials=credentials, project=credentials.project_id)
+gcs_client = storage.Client()
 BUCKET_NAME = "dry-martini-docs"
 
 # ----- Database initialization -----
