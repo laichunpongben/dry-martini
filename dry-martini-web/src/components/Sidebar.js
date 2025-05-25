@@ -13,7 +13,7 @@ import {
   MenuItem
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import SortIcon from '@mui/icons-material/Sort';  // updated icon import
+import SortIcon from '@mui/icons-material/Sort';
 
 export default function Sidebar({
   list,
@@ -98,6 +98,12 @@ export default function Sidebar({
           selected={sortMethod === 'name'}
         >
           Name
+        </MenuItem>
+        <MenuItem
+          onClick={() => handleSortSelect('issue_date')}
+          selected={sortMethod === 'issue_date'}
+        >
+          New Issue
         </MenuItem>
       </Menu>
 
