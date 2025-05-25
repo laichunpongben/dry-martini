@@ -89,6 +89,13 @@ CREATE TABLE access_logs (
   user_agent TEXT
 );
 
+CREATE TABLE security_summaries (
+  security_id  INTEGER PRIMARY KEY
+                 REFERENCES securities(id)
+                 ON DELETE CASCADE,
+  summary      TEXT            NOT NULL
+);
+
 
 -- Create a view that shows each security’s popularity metrics
 CREATE VIEW security_popularity (
