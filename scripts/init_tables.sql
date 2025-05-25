@@ -7,15 +7,27 @@ CREATE TABLE funds (
   report_date  DATE NOT NULL
 );
 
+
+-- 1) Create issuers table
+CREATE TABLE public.issuers (
+  id   SERIAL PRIMARY KEY,      -- auto‐incrementing ID :contentReference[oaicite:0]{index=0}
+  name TEXT   NOT NULL UNIQUE   -- issuer name must be present and unique :contentReference[oaicite:1]{index=1}
+);
+
 -- -------------------------------------------------------------------
 -- 2. Create securities table
 -- -------------------------------------------------------------------
-CREATE TABLE securities (
-  id    SERIAL PRIMARY KEY,
-  name  TEXT NOT NULL,
-  cusip VARCHAR(12),
-  isin  VARCHAR(15),
-  sedol VARCHAR(12)
+CREATE TABLE public.securities (
+  id             SERIAL PRIMARY KEY,                 -- auto‐incrementing PK :contentReference[oaicite:2]{index=2}
+  name           TEXT    NOT NULL,                   -- security name :contentReference[oaicite:3]{index=3}
+  cusip          VARCHAR(12),                        -- CUSIP code (up to 12 chars) :contentReference[oaicite:4]{index=4}
+  isin           VARCHAR(15),                        -- ISIN code (up to 15 chars) :contentReference[oaicite:5]{index=5}
+  sedol          VARCHAR(12),                        -- SEDOL code (up to 12 chars) :contentReference[oaicite:6]{index=6}
+  issuer_id      INTEGER REFERENCES public.issuers(id), -- links to issuers table :contentReference[oaicite:7]{index=7}
+  issue_date     DATE,                                -- date the security was issued :contentReference[oaicite:8]{index=8}
+  issue_volume   NUMERIC,                             -- total issued volume :contentReference[oaicite:9]{index=9}
+  issue_currency VARCHAR(3),                          -- ISO currency code, e.g. 'USD' :contentReference[oaicite:10]{index=10}
+  maturity       DATE                                 -- maturity date :contentReference[oaicite:11]{index=11}
 );
 
 -- -------------------------------------------------------------------
@@ -76,6 +88,7 @@ CREATE TABLE access_logs (
   client_ip INET,
   user_agent TEXT
 );
+
 
 -- Create a view that shows each security’s popularity metrics
 CREATE VIEW security_popularity (
