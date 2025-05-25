@@ -1,5 +1,3 @@
-# martini/models.py
-
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, String, Date, Numeric
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import relationship
@@ -23,6 +21,11 @@ class Security(Base):
         "PriceHistory",
         back_populates="security",
         order_by="PriceHistory.date",
+        cascade="all, delete-orphan"
+    )
+    fund_holdings = relationship(
+        "FundHolding",
+        back_populates="security",
         cascade="all, delete-orphan"
     )
 
@@ -73,3 +76,35 @@ class AccessLog(Base):
     user_agent   = Column(String, nullable=True)
 
     security = relationship("Security")
+
+class Fund(Base):
+    __tablename__ = "funds"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    fund_name   = Column(String, nullable=False)
+    report_date = Column(Date, nullable=False)
+
+    holdings = relationship(
+        "FundHolding",
+        back_populates="fund",
+        cascade="all, delete-orphan"
+    )
+
+class FundHolding(Base):
+    __tablename__ = "fund_holdings"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    fund_id          = Column(
+        Integer,
+        ForeignKey("funds.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    security_id      = Column(
+        Integer,
+        ForeignKey("securities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    pct_of_portfolio = Column(Numeric(7, 4), nullable=True)
+
+    fund     = relationship("Fund", back_populates="holdings")
+    security = relationship("Security", back_populates="fund_holdings")

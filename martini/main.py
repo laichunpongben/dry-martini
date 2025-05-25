@@ -21,7 +21,7 @@ from google.cloud import storage
 from google.oauth2 import service_account
 
 from .db import AsyncSessionLocal, Base, engine
-from .models import Document, Security, PriceHistory, AccessLog
+from .models import Document, Security, PriceHistory, AccessLog, Fund, FundHolding
 from .schemas import DocumentCreate, DocumentSchema, SecuritySchema, SecurityListItemSchema
 from .utils.logging_helper import logger
 
@@ -108,23 +108,31 @@ async def list_securities(skip: int = 0, limit: int = 100, db: AsyncSession = De
     ]
 
 @app.get("/securities/{isin}", response_model=SecuritySchema)
-async def get_security_by_isin(isin: str, request: Request, db: AsyncSession = Depends(get_db)):
-    # fetch security and record access
+async def get_security_by_isin(
+    isin: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    # 1) Fetch the security (with docs & history) and record access
     now_utc = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-    result = await db.execute(
-        orm_select(Security)
+    sec_q = (
+        select(Security)
         .where(Security.isin == isin)
-        .options(selectinload(Security.documents), selectinload(Security.price_history))
+        .options(
+            selectinload(Security.documents),
+            selectinload(Security.price_history)
+        )
     )
+    result = await db.execute(sec_q)
     sec = result.scalar_one_or_none()
     if not sec:
         raise HTTPException(status_code=404, detail=f"Security with ISIN={isin} not found")
 
+    # record access
     try:
         ip_obj = ipaddress.ip_address(request.client.host)
     except ValueError:
         ip_obj = None
-
     access = AccessLog(
         security_id=sec.id,
         accessed_at=now_utc,
@@ -134,12 +142,34 @@ async def get_security_by_isin(isin: str, request: Request, db: AsyncSession = D
     db.add(access)
     await db.commit()
 
-    # rewrite URLs to proxy endpoints
+    # proxy URLs
     base = str(request.base_url).rstrip("/")
     for doc in sec.documents:
         doc.url = f"{base}/documents/{doc.id}/proxy"
 
-    return sec
+    # Fetch fund holdings
+    holdings_q = (
+        select(Fund.fund_name, FundHolding.pct_of_portfolio)
+        .join(FundHolding, Fund.id == FundHolding.fund_id)
+        .where(FundHolding.security_id == sec.id)
+    )
+    holdings_res = await db.execute(holdings_q)
+    holdings = [
+        {"fund_name": fn, "pct_of_portfolio": float(pct)}
+        for fn, pct in holdings_res.all()
+    ]
+
+    # Return only the explicit fields, avoiding **sec.__dict__
+    return SecuritySchema(
+        id=sec.id,
+        name=sec.name,
+        cusip=sec.cusip,
+        isin=sec.isin,
+        sedol=sec.sedol,
+        documents=sec.documents,
+        price_history=sec.price_history,
+        fund_holdings=holdings,
+    )
 
 @app.post("/securities/{isin}/documents", response_model=DocumentSchema, status_code=201)
 async def add_document_to_security(isin: str, payload: DocumentCreate, db: AsyncSession = Depends(get_db)):

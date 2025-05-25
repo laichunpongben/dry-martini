@@ -4,12 +4,14 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
+
 class DocumentSchema(BaseModel):
     id: int
     doc_type: str
     url: str
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class PriceHistorySchema(BaseModel):
     date: date
@@ -22,20 +24,33 @@ class PriceHistorySchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class FundHoldingSchema(BaseModel):
+    fund_name: str
+    pct_of_portfolio: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SecuritySchema(BaseModel):
     id: int
     name: str
     cusip: Optional[str]
     isin: Optional[str]
     sedol: Optional[str]
-    documents: List[DocumentSchema] = []
+    documents: List[DocumentSchema]        = []
     price_history: List[PriceHistorySchema] = []
+    fund_holdings: List[FundHoldingSchema]  = []
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class DocumentCreate(BaseModel):
     doc_type: str
     url: str
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class SecurityListItemSchema(BaseModel):
     isin: Optional[str]
