@@ -4,6 +4,7 @@ import { ThemeProvider, Box, Typography } from '@mui/material';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import ChartCard from './components/ChartCard';
+import SummaryPanel from './components/SummaryPanel';
 import DocumentsPanel from './components/DocumentsPanel';
 import PdfViewer from './components/PdfViewer';
 import FundHoldingsPanel from './components/FundHoldingsPanel';
@@ -20,13 +21,12 @@ export default function App() {
   const [selectedIsin, setSelectedIsin] = useState(null);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
-  const [sortMethod, setSortMethod] = useState('popularity'); // new
+  const [sortMethod, setSortMethod] = useState('popularity');
 
   const securityCache = useRef({});
   const limit = 100;
   const backend = process.env.REACT_APP_BACKEND_URL || 'http://localhost:6010';
 
-  // IntersectionObserver for infinite scroll
   const observer = useRef();
   const lastListItemRef = useCallback(node => {
     if (loading || search) return;
@@ -39,10 +39,8 @@ export default function App() {
     if (node) observer.current.observe(node);
   }, [loading, hasMore, search]);
 
-  // Fetch securities list
   useEffect(() => {
     setLoading(true);
-    // reset list on sort change or search
     setList([]);
     setSkip(0);
     setHasMore(true);
@@ -57,8 +55,7 @@ export default function App() {
       .then(newItems => {
         setList(prev => {
           const existing = new Set(prev.map(i => i.isin));
-          const unique = newItems.filter(item => !existing.has(item.isin));
-          return [...prev, ...unique];
+          return [...prev, ...newItems.filter(item => !existing.has(item.isin))];
         });
         setHasMore(newItems.length === limit);
       })
@@ -66,12 +63,10 @@ export default function App() {
       .finally(() => setLoading(false));
   }, [skip, sortMethod, search, backend]);
 
-  // Set document title once
   useEffect(() => {
     document.title = 'Bond Explorer';
   }, []);
 
-  // Load security (with caching & prefetch)
   const loadSecurity = async (isin, idx) => {
     setError(null);
     setSelectedDoc(null);
@@ -94,7 +89,6 @@ export default function App() {
       }
     }
 
-    // Prefetch next
     const next = list[idx + 1];
     if (next && !securityCache.current[next.isin]) {
       fetch(`${backend}/securities/${next.isin}`)
@@ -104,7 +98,6 @@ export default function App() {
     }
   };
 
-  // Download single document
   const onDocumentClick = async doc => {
     setLoading(true);
     setError(null);
@@ -143,10 +136,9 @@ export default function App() {
           skip={skip}
           lastListItemRef={lastListItemRef}
           sortMethod={sortMethod}
-          setSortMethod={setSortMethod} // new props
+          setSortMethod={setSortMethod}
         />
 
-        {/* Center panel */}
         <Box sx={{ width: 600, p: 1, overflowY: 'auto', bgcolor: 'background.default' }}>
           {error && (
             <Typography color="error" align="center">
@@ -155,6 +147,9 @@ export default function App() {
           )}
 
           {security && <ChartCard security={security} />}
+
+          {/* Summary Panel */}
+          {security && <SummaryPanel summary={security.summary} />}
 
           {security && (
             <DocumentsPanel
