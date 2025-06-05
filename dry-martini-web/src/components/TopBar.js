@@ -26,7 +26,7 @@ export default function TopBar({ themeMode, toggleTheme }) {
         </Link>
 
         <Tooltip title="Toggle light/dark theme">
-          <Box sx={{ ml: 1 }}>
+          <Box sx={{ ml: 2 }}>
             <ThemeToggle themeMode={themeMode} toggleTheme={toggleTheme} />
           </Box>
         </Tooltip>
