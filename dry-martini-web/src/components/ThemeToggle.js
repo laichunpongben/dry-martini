@@ -13,17 +13,18 @@ export default function ThemeToggle({ themeMode, toggleTheme }) {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-      {isDark ? (
-        <Brightness4Icon fontSize="small" sx={{ mr: 0.5 }} />
-      ) : (
-        <Brightness7Icon fontSize="small" sx={{ mr: 0.5 }} />
-      )}
       <Switch
         checked={isDark}
         onChange={toggleTheme}
         color="default"
         size="small"
+        sx={{ mr: 0.5 }}
       />
+      {isDark ? (
+        <Brightness4Icon fontSize="small" />
+      ) : (
+        <Brightness7Icon fontSize="small" />
+      )}
     </Box>
   );
 }
