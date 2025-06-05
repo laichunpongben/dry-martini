@@ -4,8 +4,9 @@ import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
+import ThemeToggle from './ThemeToggle';
 
-export default function TopBar() {
+export default function TopBar({ mode, toggleMode }) {
   return (
     <AppBar position="static" color="primary">
       <Toolbar variant="dense">
@@ -22,6 +23,8 @@ export default function TopBar() {
         >
           About
         </Link>
+
+        <ThemeToggle mode={mode} toggleMode={toggleMode} />
       </Toolbar>
     </AppBar>
   );

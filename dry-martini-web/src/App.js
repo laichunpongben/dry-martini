@@ -8,7 +8,7 @@ import SummaryPanel from './components/SummaryPanel';
 import DocumentsPanel from './components/DocumentsPanel';
 import PdfViewer from './components/PdfViewer';
 import FundHoldingsPanel from './components/FundHoldingsPanel';
-import { darkTheme } from './theme';
+import { darkTheme, lightTheme } from './theme';
 
 export default function App() {
   const [list, setList] = useState([]);
@@ -22,6 +22,9 @@ export default function App() {
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [sortMethod, setSortMethod] = useState('popularity');
+  const [mode, setMode] = useState('dark');
+
+  const theme = mode === 'dark' ? darkTheme : lightTheme;
 
   const securityCache = useRef({});
   const limit = 100;
@@ -120,9 +123,12 @@ export default function App() {
       s.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  const toggleMode = () =>
+    setMode(prev => (prev === 'dark' ? 'light' : 'dark'));
+
   return (
-    <ThemeProvider theme={darkTheme}>
-      <TopBar />
+    <ThemeProvider theme={theme}>
+      <TopBar mode={mode} toggleMode={toggleMode} />
 
       <Box sx={{ display: 'flex', height: 'calc(100vh - 48px)', bgcolor: 'background.default' }}>
         <Sidebar
