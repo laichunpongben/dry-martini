@@ -1,0 +1,85 @@
+name: Build and Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          version: '>= 363.0.0'
+
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [sdk]
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      GCP_PROJECT_ID:      ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGISTRY_REGION: ${{ vars.GCP_REGISTRY_REGION }}
+      GCP_REGISTRY_REPO:   ${{ vars.GCP_REGISTRY_REPO }}
+      GCP_RUN_REGION:      ${{ vars.GCP_RUN_REGION }}
+      BACKEND_SERVICE_NAME:  ${{ vars.GCP_BACKEND_SERVICE_NAME }}
+      FRONTEND_SERVICE_NAME: ${{ vars.GCP_FRONTEND_SERVICE_NAME }}
+      IMAGE_TAG:           ${{ github.sha }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        id: checkout-code
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        id: auth-gcloud
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WID_POOL }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+          token_format: 'access_token'
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker \
+            "${{ env.GCP_REGISTRY_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build & Push Backend image
+        run: |
+          BACKEND_IMAGE_URI="${{ env.GCP_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REGISTRY_REPO }}/${{ env.BACKEND_SERVICE_NAME }}:${{ env.IMAGE_TAG }}"
+          docker build -t "$BACKEND_IMAGE_URI" .
+          docker push "$BACKEND_IMAGE_URI"
+
+      - name: Deploy Backend to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.BACKEND_SERVICE_NAME }}
+          image:  ${{ env.GCP_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REGISTRY_REPO }}/${{ env.BACKEND_SERVICE_NAME }}:${{ env.IMAGE_TAG }}
+          region: ${{ env.GCP_RUN_REGION }}
+          flags: |
+            --allow-unauthenticated
+            --port=6010
+
+      - name: Build & Push Frontend image
+        run: |
+          FRONTEND_IMAGE_URI="${{ env.GCP_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REGISTRY_REPO }}/${{ env.FRONTEND_SERVICE_NAME }}:${{ env.IMAGE_TAG }}"
+          docker build -t "$FRONTEND_IMAGE_URI" -f martini-web/Dockerfile.web martini-web
+          docker push "$FRONTEND_IMAGE_URI"
+
+      - name: Deploy Frontend to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.FRONTEND_SERVICE_NAME }}
+          image:  ${{ env.GCP_REGISTRY_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_REGISTRY_REPO }}/${{ env.FRONTEND_SERVICE_NAME }}:${{ env.IMAGE_TAG }}
+          region: ${{ env.GCP_RUN_REGION }}
+          flags: |
+            --allow-unauthenticated
+            --port=80
+
