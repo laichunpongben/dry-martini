@@ -1,6 +1,6 @@
-# Dry Martini
+# Martini
 
-Dry Martini is a full-stack “Bond Explorer” application that provides investors and analysts with easy access to bond market data, document archives, and fund holding information. It consists of:
+Martini is a full-stack “Bond Explorer” application that provides investors and analysts with easy access to bond market data, document archives, and fund holding information. It consists of:
 
 - **Backend** (`martini/`): A Python FastAPI service that exposes REST endpoints, handles database interactions, and proxies PDF documents from Google Cloud Storage.  
 - **Frontend** (`martini-web/`): A React application (with Material-UI) that offers an interactive UI for browsing securities, viewing price charts, reading documents, and inspecting fund holdings.
