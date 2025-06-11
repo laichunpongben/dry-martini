@@ -3,7 +3,7 @@
 Dry Martini is a full-stack “Bond Explorer” application that provides investors and analysts with easy access to bond market data, document archives, and fund holding information. It consists of:
 
 - **Backend** (`martini/`): A Python FastAPI service that exposes REST endpoints, handles database interactions, and proxies PDF documents from Google Cloud Storage.  
-- **Frontend** (`dry-martini-web/`): A React application (with Material-UI) that offers an interactive UI for browsing securities, viewing price charts, reading documents, and inspecting fund holdings.
+- **Frontend** (`martini-web/`): A React application (with Material-UI) that offers an interactive UI for browsing securities, viewing price charts, reading documents, and inspecting fund holdings.
 
 ---
 
@@ -55,7 +55,7 @@ martini/
 └── data/                # Static CSVs (e.g., state lists)
 ```
 
-### Frontend (`dry-martini-web/`)
+### Frontend (`martini-web/`)
 - **React** with **Material-UI** components.  
 - **Chart.js** (via `react-chartjs-2`) with annotation plugin for interactive price charts.  
 - **Infinite scroll** via `IntersectionObserver`.  
@@ -63,7 +63,7 @@ martini/
 
 Directory structure:
 ```
-dry-martini-web/
+martini-web/
 ├── src/
 │   ├── App.js           # Main application component
 │   ├── components/      # Sidebar, ChartCard, Panels, PdfViewer, etc.
@@ -87,8 +87,8 @@ dry-martini-web/
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/your-org/dry-martini.git
-   cd dry-martini/martini
+   git clone https://github.com/your-org/martini.git
+   cd martini/martini
    ```
 2. Create a virtual environment and install dependencies:
    ```bash
@@ -112,7 +112,7 @@ dry-martini-web/
 
 1. In a separate terminal, navigate to the frontend folder:
    ```bash
-   cd ../dry-martini-web
+   cd ../martini-web
    ```
 2. Install dependencies:
    ```bash
